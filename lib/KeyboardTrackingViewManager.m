@@ -134,10 +134,10 @@ typedef NS_ENUM(NSUInteger, KeyboardTrackingScrollBehavior) {
                 {
                     _scrollViewToManage = ((RCTScrollView*)subview).scrollView;
                 }
-                else if([subview isKindOfClass:[UIScrollView class]])
-                {
-                    _scrollViewToManage = (UIScrollView*)subview;
-                }
+                // else if([subview isKindOfClass:[UIScrollView class]])
+                // {
+                //     _scrollViewToManage = (UIScrollView*)subview;
+                // }
                 
                 if(_scrollViewToManage != nil)
                 {
