@@ -176,9 +176,9 @@ typedef NS_ENUM(NSUInteger, KeyboardTrackingScrollBehavior) {
             
             [_inputViewsMap setObject:subview forKey:@(kInputViewKey)];
         }
-        else if ([subview isKindOfClass:NSClassFromString(@"RCTTextView")])
+        else if ([subview isKindOfClass:NSClassFromString(@"RCTMultilineTextInputView")])
         {
-            UITextView *textView = [subview valueForKey:@"_backedTextInput"];
+            UITextView *textView = [subview valueForKey:@"_backedTextInputView"];
             if (textView != nil)
             {
                 [textView setInputAccessoryView:_observingInputAccessoryView];
