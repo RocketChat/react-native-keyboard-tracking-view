@@ -14,6 +14,7 @@
 #import <React/RCTBridge.h>
 #import <React/RCTUIManager.h>
 #import <React/UIView+React.h>
+#import <React/RCTUIManagerUtils.h>
 
 #import <objc/runtime.h>
 
@@ -49,6 +50,7 @@ typedef NS_ENUM(NSUInteger, KeyboardTrackingScrollBehavior) {
 @property (nonatomic) KeyboardTrackingScrollBehavior scrollBehavior;
 @property (nonatomic) BOOL addBottomView;
 @property (nonatomic) BOOL scrollToFocusedInput;
+@property (nonatomic) BOOL allowHitsOutsideBounds;
 
 @end
 
@@ -72,6 +74,7 @@ typedef NS_ENUM(NSUInteger, KeyboardTrackingScrollBehavior) {
         _observingInputAccessoryView.delegate = self;
         
         _manageScrollView = YES;
+        _allowHitsOutsideBounds = NO;
         
         _bottomViewHeight = kBottomViewHeight;
         
@@ -99,6 +102,30 @@ typedef NS_ENUM(NSUInteger, KeyboardTrackingScrollBehavior) {
         return (RCTRootView*)view;
     }
     return nil;
+}
+
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
+    if (!_allowHitsOutsideBounds) {
+        return [super hitTest:point withEvent:event];
+    }
+    
+    if (self.isHidden || self.alpha == 0 || self.clipsToBounds) {
+        return nil;
+    }
+    
+    UIView *subview = [super hitTest:point withEvent:event];
+    if (subview == nil) {
+        NSArray<UIView*>* allSubviews = [self getBreadthFirstSubviewsForView:self];
+        for (UIView *tmpSubview in allSubviews) {
+            CGPoint pointInSubview = [self convertPoint:point toView:tmpSubview];
+            if ([tmpSubview pointInside:pointInSubview withEvent:event]) {
+                subview = tmpSubview;
+                break;
+            }
+        }
+    }
+    
+    return subview;
 }
 
 -(void)_swizzleWebViewInputAccessory:(UIWebView*)webview
@@ -170,15 +197,46 @@ typedef NS_ENUM(NSUInteger, KeyboardTrackingScrollBehavior) {
         
         if ([subview isKindOfClass:NSClassFromString(@"RCTTextField")])
         {
-            UITextField *textField =  [subview valueForKey:@"_backedTextInput"];
+            UITextField *textField = nil;
+            Ivar backedTextInputIvar = class_getInstanceVariable([subview class], "_backedTextInput");
+            if (backedTextInputIvar != NULL)
+            {
+                textField = [subview valueForKey:@"_backedTextInput"];
+            }
+            else if([subview isKindOfClass:[UITextField class]])
+            {
+                textField = (UITextField*)subview;
+            }
+            
+            if (textField != nil)
+            {
+                [textField setInputAccessoryView:_observingInputAccessoryView];
+                [textField reloadInputViews];
+                [_inputViewsMap setObject:subview forKey:@(kInputViewKey)];
+            }
+        }
+        else if ([subview isKindOfClass:NSClassFromString(@"RCTUITextField")] && [subview isKindOfClass:[UITextField class]])
+        {
+            UITextField *textField = (UITextField*)subview;
             [textField setInputAccessoryView:_observingInputAccessoryView];
             [textField reloadInputViews];
             
-            [_inputViewsMap setObject:subview forKey:@(kInputViewKey)];
+            [_inputViewsMap setObject:textField forKey:@(kInputViewKey)];
         }
         else if ([subview isKindOfClass:NSClassFromString(@"RCTMultilineTextInputView")])
         {
-            UITextView *textView = [subview valueForKey:@"_backedTextInputView"];
+            // UITextView *textView = [subview valueForKey:@"_backedTextInputView"];
+            UITextView *textView = nil;
+            Ivar backedTextInputIvar = class_getInstanceVariable([subview class], "_backedTextInput");
+            if (backedTextInputIvar != NULL)
+            {
+                textView = [subview valueForKey:@"_backedTextInput"];
+            }
+            else if([subview isKindOfClass:[UITextView class]])
+            {
+                textView = (UITextView*)subview;
+            }
+            
             if (textView != nil)
             {
                 [textView setInputAccessoryView:_observingInputAccessoryView];
@@ -186,6 +244,14 @@ typedef NS_ENUM(NSUInteger, KeyboardTrackingScrollBehavior) {
                 
                 [_inputViewsMap setObject:textView forKey:@(kInputViewKey)];
             }
+        }
+        else if ([subview isKindOfClass:NSClassFromString(@"RCTUITextView")] && [subview isKindOfClass:[UITextView class]])
+        {
+            UITextView *textView = (UITextView*)subview;
+            [textView setInputAccessoryView:_observingInputAccessoryView];
+            [textView reloadInputViews];
+            
+            [_inputViewsMap setObject:textView forKey:@(kInputViewKey)];
         }
         else if ([subview isKindOfClass:[UIWebView class]])
         {
@@ -564,6 +630,7 @@ RCT_REMAP_VIEW_PROPERTY(manageScrollView, manageScrollView, BOOL)
 RCT_REMAP_VIEW_PROPERTY(requiresSameParentToManageScrollView, requiresSameParentToManageScrollView, BOOL)
 RCT_REMAP_VIEW_PROPERTY(addBottomView, addBottomView, BOOL)
 RCT_REMAP_VIEW_PROPERTY(scrollToFocusedInput, scrollToFocusedInput, BOOL)
+RCT_REMAP_VIEW_PROPERTY(allowHitsOutsideBounds, allowHitsOutsideBounds, BOOL)
 
 - (NSDictionary<NSString *, id> *)constantsToExport
 {
@@ -591,7 +658,7 @@ RCT_EXPORT_METHOD(getNativeProps:(nonnull NSNumber *)reactTag resolver:(RCTPromi
              [self rejectPromise:reject withErrorMessage:errorMessage errorCode:kTrackingViewNotFoundErrorCode];
              return;
          }
-
+         
          resolve(@{@"trackingViewHeight": @(view.bounds.size.height),
                    @"keyboardHeight": @([view getKeyboardHeight]),
                    @"contentTopInset": @([view getScrollViewTopContentInset])});
